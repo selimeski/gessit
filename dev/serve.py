@@ -1,4 +1,4 @@
-"""Yerel test sunucusu: kor-harita.html'i Artifact iskeletine sarıp http://localhost:8765 adresinde sunar.
+"""Yerel test sunucusu: gessit.html'i Artifact iskeletine sarıp http://localhost:8765 adresinde sunar.
 
 Dosya her istekte yeniden okunur, değişiklikleri görmek için sayfayı yenilemek yeterli.
 Kullanım: python3 dev/serve.py
@@ -6,7 +6,7 @@ Kullanım: python3 dev/serve.py
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
-GAME = Path(__file__).resolve().parent.parent / "kor-harita.html"
+GAME = Path(__file__).resolve().parent.parent / "gessit.html"
 PORT = 8765
 
 HEAD = (
