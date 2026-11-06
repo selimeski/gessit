@@ -126,6 +126,7 @@ button:focus-visible{outline:2px solid var(--pin);outline-offset:3px}
 .rows .rk{font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
 .rows .rp{font-family:var(--f-mono);font-weight:700;color:var(--pin);min-width:4ch;text-align:right}
 .actions{display:flex;gap:10px}
+#nameInput,#linkOutput{font:inherit;font-size:16px;color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;-webkit-user-select:text;user-select:text}
 .btn{flex:1;border-radius:12px;padding:13px 14px;font-weight:600;border:1px solid var(--line);background:transparent}
 .btn.primary{background:var(--pin);border-color:var(--pin);color:#132b36}
 </style>
@@ -207,11 +208,15 @@ button:focus-visible{outline:2px solid var(--pin);outline-offset:3px}
         <div class="big" id="totalScore">0<small> / 3000</small></div>
         <div class="badge" id="badge" hidden>Yeni rekor</div>
       </div>
+      <div class="reslabel" id="resVersus" hidden></div>
       <div class="rows" id="rows"></div>
       <div class="actions">
         <button class="btn" id="btnHome">Kıta değiştir</button>
-        <button class="btn primary" id="btnAgain">Tekrar oyna</button>
+        <button class="btn" id="btnAgain">Tekrar oyna</button>
       </div>
+      <input id="nameInput" maxlength="20" placeholder="Adın" aria-label="Adın" hidden>
+      <button class="btn primary" id="btnChallenge">Meydan oku</button>
+      <input id="linkOutput" readonly aria-label="Meydan okuma linki" hidden>
     </div>
   </div>
 </section>
@@ -418,6 +423,8 @@ function makeProjection(key, extent) {
 /* ---------- Storage (best effort) ---------- */
 function getBest(key, level) { try { return +localStorage.getItem(`gessit.best.${level}.${key}`) || 0; } catch { return 0; } }
 function setBest(key, level, v) { try { localStorage.setItem(`gessit.best.${level}.${key}`, String(v)); } catch {} }
+function getName() { try { return localStorage.getItem('gessit.name') || ''; } catch { return ''; } }
+function setName(n) { try { localStorage.setItem('gessit.name', n); } catch {} }
 function loadLevel() { try { const l = localStorage.getItem('gessit.level'); return LEVELS[l] ? l : 'kolay'; } catch { return 'kolay'; } }
 function saveLevel(l) { try { localStorage.setItem('gessit.level', l); } catch {} }
 let level = loadLevel();
@@ -624,8 +631,49 @@ function showResults() {
   $('totalScore').innerHTML = `${fmt(game.total)}<small> / ${fmt(MAX_POINTS * game.qs.length)}</small>`;
   $('rows').innerHTML = game.results.map((r, i) =>
     `<div><span class="rn">${i + 1}. yer</span><span class="rk">${r.km == null ? 'süre doldu' : fmtKm(r.km)}</span><span class="rp">${fmt(r.pts)}</span></div>`).join('');
+  const ch = game.challenge;
+  $('resVersus').hidden = !ch;
+  if (ch) {
+    const outcome = game.total > ch.p ? 'Kazandın' : game.total < ch.p ? 'Kaybettin' : 'Berabere';
+    $('resVersus').textContent = `Sen ${fmt(game.total)}, ${ch.n} ${fmt(ch.p)} · ${outcome}`;
+  }
+  $('nameInput').hidden = true;
+  $('linkOutput').hidden = true;
+  $('btnChallenge').textContent = 'Meydan oku';
   $('sheet').hidden = false;
   layoutMap();
+}
+
+async function shareChallenge() {
+  const n = (getName() || $('nameInput').value).trim();
+  if (!n) {
+    $('nameInput').hidden = false;
+    $('nameInput').focus();
+    layoutMap();
+    return;
+  }
+  setName(n);
+  $('nameInput').hidden = true;
+  // shortcut: location tabanlı adres, Capacitor'a geçerken sabit web adresine çevir
+  const url = challengeLink(location.origin + location.pathname, { c: game.key, l: game.level, s: game.seed, p: game.total, n });
+  const text = `Gessit'te ${CONTINENTS[game.key].name} · ${LEVELS[game.level].name} turunda ${fmt(game.total)} puan aldım. Geçebilir misin?`;
+  if (navigator.share) {
+    try {
+      await navigator.share({ text, url });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    $('btnChallenge').textContent = 'Link kopyalandı';
+  } catch {
+    $('linkOutput').value = url;
+    $('linkOutput').hidden = false;
+    $('linkOutput').select();
+    layoutMap();
+  }
 }
 
 function redrawGuides() {
@@ -677,6 +725,8 @@ function goHome() {
 $('btnQuit').addEventListener('click', goHome);
 $('btnHome').addEventListener('click', goHome);
 $('btnAgain').addEventListener('click', () => startGame(game.key));
+$('btnChallenge').addEventListener('click', shareChallenge);
+$('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') shareChallenge(); });
 window.addEventListener('resize', () => { if (game) layoutMap(); });
 
 renderHome();
