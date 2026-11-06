@@ -40,6 +40,8 @@ button:focus-visible{outline:2px solid var(--pin);outline-offset:3px}
 .brand h1{font-family:var(--f-display);font-weight:800;font-size:clamp(44px, 13vw, 84px);line-height:.9;letter-spacing:-.03em;margin:0;text-wrap:balance}
 .brand h1 span{color:transparent;-webkit-text-stroke:1.5px var(--land)}
 .brand p{margin:0;color:var(--muted);font-size:16px;line-height:1.5;max-width:44ch}
+#challenge{overflow-y:auto;background:var(--ocean)}
+.chtitle{font-family:var(--f-display);font-weight:800;font-size:clamp(32px, 9vw, 52px);line-height:1.05;letter-spacing:-.02em;margin:0;text-wrap:balance;overflow-wrap:anywhere}
 .pick-label{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
 .grid{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:12px}
 @media (min-width:620px){.grid{grid-template-columns:repeat(3, minmax(0,1fr))}}
@@ -147,6 +149,20 @@ button:focus-visible{outline:2px solid var(--pin);outline-offset:3px}
     <div class="pick-label">Bir kıta seç</div>
     <div id="loading">Harita yükleniyor…</div>
     <div class="grid" id="grid"></div>
+  </div>
+</section>
+
+<section id="challenge" class="screen" hidden>
+  <div class="home-inner gutter">
+    <div class="brand">
+      <div class="eyebrow">Meydan okuma</div>
+      <h2 class="chtitle" id="chTitle"></h2>
+      <p id="chMeta"></p>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnChSkip">Kendi oyunumu seç</button>
+      <button class="btn primary" id="btnChPlay">Oyna</button>
+    </div>
   </div>
 </section>
 
@@ -475,15 +491,17 @@ function layoutMap() {
   placeMarkers();
 }
 
-function pickQuestions(key) {
+function pickQuestions(key, seed) {
   const pool = PLACES[key].slice();
-  d3.shuffle(pool);
+  d3.shuffler(d3.randomLcg(seed))(pool);
   return pool.slice(0, LEVELS[level].count).map(([name, type, country, lat, lon]) => ({ name, type, country, lat, lon }));
 }
 
-function startGame(key) {
+function startGame(key, ch = null) {
   clearTimeout(revealTimer);
-  game = { key, level, qs: pickQuestions(key), idx: 0, timeLeft: ROUND_TIME_MS, results: [], state: 'asking', total: 0, guides: [] };
+  if (ch) level = ch.l; // kaydedilmez: oyuncunun kendi seviye tercihi değişmesin
+  const seed = ch ? ch.s : Math.floor(Math.random() * 2147483648);
+  game = { key, level, seed, challenge: ch, qs: pickQuestions(key, seed), idx: 0, timeLeft: ROUND_TIME_MS, results: [], state: 'asking', total: 0, guides: [] };
   $('home').hidden = true;
   $('game').hidden = false;
   $('sheet').hidden = true;
@@ -662,6 +680,20 @@ $('btnAgain').addEventListener('click', () => startGame(game.key));
 window.addEventListener('resize', () => { if (game) layoutMap(); });
 
 renderHome();
+
+const incoming = parseChallenge(location.search, CONTINENTS, LEVELS, MAX_POINTS);
+if (incoming) {
+  $('chTitle').textContent = `${incoming.n} sana ${fmt(incoming.p)} puanla meydan okudu`;
+  $('chMeta').textContent = `${CONTINENTS[incoming.c].name} · ${LEVELS[incoming.l].name}`;
+  $('home').hidden = true;
+  $('challenge').hidden = false;
+  const leave = () => {
+    history.replaceState(null, '', location.pathname);
+    $('challenge').hidden = true;
+  };
+  $('btnChPlay').addEventListener('click', () => { leave(); startGame(incoming.c, incoming); });
+  $('btnChSkip').addEventListener('click', () => { leave(); $('home').hidden = false; });
+}
 </script>
 </body>
 </html>
