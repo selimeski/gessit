@@ -21,13 +21,12 @@
 }
 *,*::before,*::after{box-sizing:border-box}
 [hidden]{display:none!important}
-:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html,body{height:100%}
 body{margin:0}
 body{background:var(--ocean);color:var(--ink);font-family:var(--f-body);font-size:15px;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation}
 button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible{outline:2px solid var(--pin);outline-offset:3px}
-.screen{position:absolute;inset:0}
+.screen{position:absolute;inset:env(safe-area-inset-top,0px) 0 0}
 .gutter{padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
 
 /* ---------- Home ---------- */
@@ -717,6 +716,7 @@ function goHome() {
   clearTimeout(revealTimer);
   cancelAnimationFrame(rafId);
   game = null; markers = [];
+  level = loadLevel();
   $('game').hidden = true;
   $('home').hidden = false;
   renderHome();
