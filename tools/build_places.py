@@ -11,6 +11,9 @@ BASE_URL = 'https://download.geonames.org/export/dump/'
 TARGETS = {'Şehir': 300, 'Kasaba': 700, 'Köy': 1000}
 CELL = {'Şehir': 2.0, 'Kasaba': 1.0, 'Köy': 0.5}
 SKIP_CODES = {'PPLX', 'PPLH', 'PPLQ', 'PPLW', 'PPLCH'}
+COUNTRY_SHARE = 0.1  # ilk turlarda bir ülke bir türün en çok %10'unu alır
+DISTRICT_KM = 20     # daha büyük bir şehre bu kadar yakın şehirler semt sayılır
+THRACE = {'22', '39', '59'}  # Edirne, Kırklareli, Tekirdağ
 GN_CONT = {'EU': 'europe', 'AS': 'asia', 'AF': 'africa', 'NA': 'namerica', 'SA': 'samerica', 'OC': 'oceania'}
 
 
@@ -36,6 +39,29 @@ def kind(pop):
     return 'Şehir' if pop >= 100000 else 'Kasaba' if pop >= 5000 else 'Köy'
 
 
+def side_ok(p, key):
+    # Türkiye ve Rusya iki kıtada: yer, ülkenin o kıtadaki kısmında olmalı.
+    if p['cc'] == 'RU' and key in ('europe', 'asia'):
+        return (p['lon'] < 60) == (key == 'europe')  # Urallar
+    if p['cc'] == 'TR' and key in ('europe', 'asia'):
+        # shortcut: İstanbul'da boğaz sınırı boylam 29.0 ile yaklaşık, kıyıya çok yakın semtler karışabilir
+        thrace = p['admin'] in THRACE or (p['admin'] == '34' and p['lon'] < 29.0)
+        return thrace == (key == 'europe')
+    return True
+
+
+def km(a, b):
+    la1, la2 = math.radians(a['lat']), math.radians(b['lat'])
+    h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin(math.radians(b['lon'] - a['lon']) / 2) ** 2
+    return 12742 * math.asin(math.sqrt(h))
+
+
+def drop_districts(cands):
+    cities = sorted((p for p in cands if p['kind'] == 'Şehir'), key=lambda p: (-p['pop'], p['id']))
+    drop = {c['id'] for i, c in enumerate(cities) if any(km(c, b) < DISTRICT_KM for b in cities[:i])}
+    return [p for p in cands if p['id'] not in drop]
+
+
 def in_box(p, bbox):
     x0, y0, x1, y1 = bbox
     return x0 <= p['lon'] <= x1 and y0 <= p['lat'] <= y1
@@ -57,13 +83,13 @@ def load_places(folder, continents):
             if f[7] in SKIP_CODES or pop < 500:
                 continue
             p = {'id': int(f[0]), 'name': f[1], 'lat': float(f[4]), 'lon': float(f[5]),
-                 'cc': f[8], 'pop': pop, 'kind': kind(pop)}
+                 'cc': f[8], 'admin': f[10], 'pop': pop, 'kind': kind(pop)}
             num = numeric.get(f[8])
             keys = [k for k, c in continents.items() if num in c['ids']]
             if not keys and gn_cont.get(f[8]):
                 keys = [gn_cont[f[8]]]  # ISO kodu listede olmayan ülkeler (Kosova vb.)
             for k in keys:
-                if in_box(p, continents[k]['bbox']):
+                if in_box(p, continents[k]['bbox']) and side_ok(p, k):
                     by_cont[k].append(p)
     return by_cont
 
@@ -71,15 +97,17 @@ def load_places(folder, continents):
 def spread(cands, size, target):
     cands = sorted(cands, key=lambda p: (-p['pop'], p['id']))
     taken, cells, chosen = set(), set(), []
-    for p in cands:
-        cell = (math.floor(p['lat'] / size), math.floor(p['lon'] / size))
-        if cell not in cells and len(chosen) < target:
+    cap, per = max(1, int(target * COUNTRY_SHARE)), {}
+    # 1: kare ve ülke sınırıyla, 2: sadece ülke sınırıyla, 3: sınırsız; hep nüfus sırasıyla
+    for use_cell, use_cap in ((True, True), (False, True), (False, False)):
+        for p in cands:
+            if len(chosen) >= target:
+                return chosen
+            cell = (math.floor(p['lat'] / size), math.floor(p['lon'] / size))
+            if p['id'] in taken or (use_cell and cell in cells) or (use_cap and per.get(p['cc'], 0) >= cap):
+                continue
             cells.add(cell); taken.add(p['id']); chosen.append(p)
-    for p in cands:
-        if len(chosen) >= target:
-            break
-        if p['id'] not in taken:
-            taken.add(p['id']); chosen.append(p)
+            per[p['cc']] = per.get(p['cc'], 0) + 1
     return chosen
 
 
@@ -99,7 +127,7 @@ def turkish_names(folder, ids):
 
 
 def select(cands, banned):
-    pool = [p for p in cands if p['display'] not in banned]
+    pool = [p for p in cands if p['display'] not in banned and not set('/(') & set(p['display'])]
     return [p for t in TARGETS for p in spread([p for p in pool if p['kind'] == t], CELL[t], TARGETS[t])]
 
 
@@ -115,6 +143,7 @@ def main():
             p['display'] = tr.get(p['id'], p['name']) if p['kind'] == 'Şehir' else p['name']
     (ROOT / 'places').mkdir(exist_ok=True)
     for key, cands in by_cont.items():
+        cands = drop_districts(cands)
         # Aynı adı taşıyan yerler tamamen çıkarılır; boşalan yer yeni seçimle doldurulur.
         banned = set()
         while True:
@@ -129,8 +158,9 @@ def main():
         # Kendi kontroller
         assert all(in_box(p, continents[key]['bbox']) for p in chosen), key
         assert len({p['display'] for p in chosen}) == len(chosen), key
+        assert all(side_ok(p, key) and not set('/(') & set(p['display']) for p in chosen), key
         for t, n in counts.items():
-            avail = sum(p['kind'] == t and p['display'] not in banned for p in cands)
+            avail = sum(p['kind'] == t and p['display'] not in banned and not set('/(') & set(p['display']) for p in cands)
             assert 1 <= n <= TARGETS[t] and (n == TARGETS[t] or n == avail), (key, t, n, avail)
         rows = sorted(([p['display'], p['kind'], p['cc'], round(p['lat'], 5), round(p['lon'], 5)] for p in chosen),
                       key=lambda r: (list(TARGETS).index(r[1]), r[0]))
