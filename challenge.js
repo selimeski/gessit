@@ -13,4 +13,19 @@ function parseChallenge(search, continents, levels, maxPoints) {
   return n ? { c, l, s: +s, p: +p, n } : null;
 }
 
-if (typeof module !== 'undefined') module.exports = { challengeLink, parseChallenge };
+function shuffle(arr, rng) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Her türden counts kadar yer seçer; aynı rng aynı soruları verir.
+function pickPlaces(places, counts, rng) {
+  const picked = ['Şehir', 'Kasaba', 'Köy'].flatMap(t =>
+    shuffle(places.filter(p => p[1] === t), rng).slice(0, counts[t] || 0));
+  return shuffle(picked, rng);
+}
+
+if (typeof module !== 'undefined') module.exports = { challengeLink, parseChallenge, pickPlaces };
