@@ -51,6 +51,9 @@ button:focus-visible{outline:2px solid var(--pin);outline-offset:3px}
 .card .cname{font-family:var(--f-display);font-weight:700;font-size:19px;letter-spacing:-.01em}
 .card .cbest{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 .card .cbest b{color:var(--pin);font-weight:700}
+.credit{font-family:var(--f-mono);font-size:11px;color:var(--muted);margin:0}
+.credit a{color:inherit}
+.load-error{color:var(--truth);margin:0}
 .levels{display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:6px;background:var(--ocean-2);border:1px solid var(--line);border-radius:14px;padding:5px}
 .level{border:0;background:transparent;border-radius:10px;padding:9px 6px;display:flex;flex-direction:column;align-items:center;gap:2px}
 .level b{font-family:var(--f-display);font-weight:700;font-size:16px}
@@ -146,8 +149,10 @@ button:focus-visible{outline:2px solid var(--pin);outline-offset:3px}
       <span>toplam <b>15</b> saniye</span>
       <span>yer başına en çok <b>1000</b> puan</span>
     </div>
+    <p class="credit">Yer verisi: <a href="https://www.geonames.org/" target="_blank" rel="noopener">GeoNames</a></p>
     <div class="pick-label">Bir kıta seç</div>
     <div id="loading">Harita yükleniyor…</div>
+    <p class="load-error" id="loadError" role="alert" hidden></p>
     <div class="grid" id="grid"></div>
   </div>
 </section>
@@ -158,6 +163,7 @@ button:focus-visible{outline:2px solid var(--pin);outline-offset:3px}
       <div class="eyebrow">Meydan okuma</div>
       <h2 class="chtitle" id="chTitle"></h2>
       <p id="chMeta"></p>
+      <p class="load-error" id="chError" role="alert" hidden></p>
     </div>
     <div class="actions">
       <button class="btn" id="btnChSkip">Kendi oyunumu seç</button>
@@ -228,9 +234,9 @@ const TOPO = {"type":"Topology","objects":{"countries":{"type":"GeometryCollecti
 ;
 
 const LEVELS = {
-  kolay: { name: 'Kolay', count: 3 },
-  orta:  { name: 'Orta',  count: 5 },
-  zor:   { name: 'Zor',   count: 7 },
+  kolay: { name: 'Kolay', count: 3, mix: { 'Şehir': 1, 'Kasaba': 1, 'Köy': 1 } },
+  orta:  { name: 'Orta',  count: 5, mix: { 'Şehir': 1, 'Kasaba': 2, 'Köy': 2 } },
+  zor:   { name: 'Zor',   count: 7, mix: { 'Şehir': 1, 'Kasaba': 3, 'Köy': 3 } },
 };
 const ROUND_TIME_MS = 15000;
 const REVEAL_MS = 500;
@@ -254,132 +260,18 @@ const CONTINENTS = {
 };
 const ORDER = ['europe','africa','samerica','namerica','oceania','asia'];
 
-// [ad, tür, ülke, enlem, boylam]
-const PLACES = {
-  europe: [
-    ['Porto','Şehir','Portekiz',41.15,-8.61],['Sevilla','Şehir','İspanya',37.39,-5.98],['Bilbao','Şehir','İspanya',43.26,-2.93],
-    ['Bordeaux','Şehir','Fransa',44.84,-0.58],['Strazburg','Şehir','Fransa',48.57,7.75],['Chamonix','Kasaba','Fransa',45.92,6.87],
-    ['Hallstatt','Köy','Avusturya',47.56,13.65],['Zermatt','Köy','İsviçre',46.02,7.75],['Münih','Şehir','Almanya',48.14,11.58],
-    ['Hamburg','Şehir','Almanya',53.55,9.99],['Giethoorn','Köy','Hollanda',52.74,6.08],['Kraków','Şehir','Polonya',50.06,19.94],
-    ['Gdańsk','Şehir','Polonya',54.35,18.65],['Bergen','Şehir','Norveç',60.39,5.32],['Tromsø','Şehir','Norveç',69.65,18.96],
-    ['Rovaniemi','Şehir','Finlandiya',66.50,25.73],['Reykjavik','Şehir','İzlanda',64.15,-21.94],['Edinburgh','Şehir','Birleşik Krallık',55.95,-3.19],
-    ['Cork','Şehir','İrlanda',51.90,-8.47],['Napoli','Şehir','İtalya',40.85,14.27],['Palermo','Şehir','İtalya',38.12,13.36],
-    ['Dubrovnik','Şehir','Hırvatistan',42.65,18.09],['Selanik','Şehir','Yunanistan',40.64,22.94],['Oia','Köy','Yunanistan',36.46,25.38],
-    ['Varna','Şehir','Bulgaristan',43.21,27.91],['Cluj-Napoca','Şehir','Romanya',46.77,23.59],['Odessa','Şehir','Ukrayna',46.48,30.72],
-    ['Vilnius','Şehir','Litvanya',54.69,25.28],['Kazan','Şehir','Rusya',55.79,49.12],['Edirne','Şehir','Türkiye',41.68,26.56],
-    ['Demirköy','İlçe','Türkiye',41.82,27.77],
-    ['Salzburg','Şehir','Avusturya',47.81,13.04],['Brugge','Şehir','Belçika',51.21,3.22],['Lyon','Şehir','Fransa',45.76,4.84],
-    ['Marsilya','Şehir','Fransa',43.30,5.37],['Ajaccio','Şehir','Fransa',41.93,8.74],['Granada','Şehir','İspanya',37.18,-3.60],
-    ['Santiago de Compostela','Şehir','İspanya',42.88,-8.54],['Faro','Şehir','Portekiz',37.02,-7.93],['Bologna','Şehir','İtalya',44.49,11.34],
-    ['Alberobello','Kasaba','İtalya',40.78,17.24],['Valletta','Şehir','Malta',35.90,14.51],['Inverness','Şehir','Birleşik Krallık',57.48,-4.22],
-    ['Cardiff','Şehir','Birleşik Krallık',51.48,-3.18],['Göteborg','Şehir','İsveç',57.71,11.97],['Kiruna','Kasaba','İsveç',67.86,20.23],
-    ['Geiranger','Köy','Norveç',62.10,7.21],['Aarhus','Şehir','Danimarka',56.16,10.20],['Tallinn','Şehir','Estonya',59.44,24.75],
-    ['Murmansk','Şehir','Rusya',68.97,33.08],['Lviv','Şehir','Ukrayna',49.84,24.03],['Brno','Şehir','Çekya',49.20,16.61],
-    ['Saraybosna','Şehir','Bosna-Hersek',43.86,18.41],['Kotor','Kasaba','Karadağ',42.42,18.77],['Ohri','Şehir','Kuzey Makedonya',41.12,20.80],
-  ],
-  asia: [
-    ['Erzurum','Şehir','Türkiye',39.90,41.27],['Ürgüp','İlçe','Türkiye',38.63,34.91],['Uzungöl','Köy','Türkiye',40.62,40.29],
-    ['Kaş','İlçe','Türkiye',36.20,29.64],['Tebriz','Şehir','İran',38.08,46.29],['Şiraz','Şehir','İran',29.59,52.58],
-    ['Basra','Şehir','Irak',30.51,47.78],['Halep','Şehir','Suriye',36.20,37.16],['Mekke','Şehir','Suudi Arabistan',21.42,39.83],
-    ['Maskat','Şehir','Umman',23.59,58.41],['Semerkant','Şehir','Özbekistan',39.65,66.96],['Almatı','Şehir','Kazakistan',43.24,76.89],
-    ['Karaçi','Şehir','Pakistan',24.86,67.01],['Leh','Kasaba','Hindistan',34.16,77.58],['Varanasi','Şehir','Hindistan',25.32,83.01],
-    ['Chennai','Şehir','Hindistan',13.08,80.27],['Katmandu','Şehir','Nepal',27.72,85.32],['Kandy','Şehir','Sri Lanka',7.29,80.63],
-    ['Lhasa','Şehir','Çin',29.65,91.17],['Kaşgar','Şehir','Çin',39.47,75.99],['Chengdu','Şehir','Çin',30.57,104.07],
-    ['Harbin','Şehir','Çin',45.80,126.53],['Busan','Şehir','Güney Kore',35.18,129.08],['Sapporo','Şehir','Japonya',43.06,141.35],
-    ['Hiroşima','Şehir','Japonya',34.39,132.46],['Ulan Batur','Şehir','Moğolistan',47.89,106.91],['Yakutsk','Şehir','Rusya',62.03,129.73],
-    ['Novosibirsk','Şehir','Rusya',55.03,82.92],['Luang Prabang','Kasaba','Laos',19.89,102.13],['Hoi An','Kasaba','Vietnam',15.88,108.33],
-    ['Chiang Mai','Şehir','Tayland',18.79,98.98],['Kuala Lumpur','Şehir','Malezya',3.14,101.69],['Ubud','Kasaba','Endonezya',-8.51,115.26],
-    ['Cebu','Şehir','Filipinler',10.32,123.89],
-    ['Bakü','Şehir','Azerbaycan',40.41,49.87],['Tiflis','Şehir','Gürcistan',41.72,44.79],['Erivan','Şehir','Ermenistan',40.18,44.51],
-    ['İsfahan','Şehir','İran',32.65,51.67],['Dubai','Şehir','BAE',25.20,55.27],['Sana','Şehir','Yemen',15.37,44.19],
-    ['Petra','Kasaba','Ürdün',30.33,35.44],['Buhara','Şehir','Özbekistan',39.77,64.42],['Lahor','Şehir','Pakistan',31.55,74.34],
-    ['Jaipur','Şehir','Hindistan',26.91,75.79],['Panaji','Şehir','Hindistan',15.49,73.83],['Kalküta','Şehir','Hindistan',22.57,88.36],
-    ['Darjeeling','Kasaba','Hindistan',27.04,88.26],['Thimphu','Şehir','Butan',27.47,89.64],['Yangon','Şehir','Myanmar',16.84,96.17],
-    ['Siem Reap','Şehir','Kamboçya',13.36,103.86],['Şanghay','Şehir','Çin',31.23,121.47],['Guilin','Şehir','Çin',25.27,110.29],
-    ['Dunhuang','Şehir','Çin',40.14,94.66],['Kyoto','Şehir','Japonya',35.01,135.77],['Vladivostok','Şehir','Rusya',43.12,131.89],
-    ['İrkutsk','Şehir','Rusya',52.29,104.28],['Norilsk','Şehir','Rusya',69.35,88.20],['El Nido','Kasaba','Filipinler',11.20,119.41],
-    ['Yogyakarta','Şehir','Endonezya',-7.80,110.36],['Kuching','Şehir','Malezya',1.55,110.36],
-  ],
-  africa: [
-    ['Marakeş','Şehir','Fas',31.63,-8.01],['Fes','Şehir','Fas',34.03,-5.00],['Şafşavan','Kasaba','Fas',35.17,-5.27],
-    ['Tamanrasset','Şehir','Cezayir',22.79,5.52],['Timbuktu','Şehir','Mali',16.77,-3.01],['Bamako','Şehir','Mali',12.64,-8.00],
-    ['Dakar','Şehir','Senegal',14.72,-17.47],['Agadez','Şehir','Nijer',16.97,7.99],['Lagos','Şehir','Nijerya',6.52,3.38],
-    ['Kano','Şehir','Nijerya',12.00,8.52],['Siwa','Kasaba','Mısır',29.20,25.52],['Luksor','Şehir','Mısır',25.69,32.64],
-    ['Asuan','Şehir','Mısır',24.09,32.90],['Hartum','Şehir','Sudan',15.50,32.56],['Lalibela','Kasaba','Etiyopya',12.03,39.04],
-    ['Mogadişu','Şehir','Somali',2.05,45.32],['Mombasa','Şehir','Kenya',-4.04,39.67],['Zanzibar','Şehir','Tanzanya',-6.16,39.19],
-    ['Kigali','Şehir','Ruanda',-1.95,30.06],['Kisangani','Şehir','Kongo DC',0.52,25.19],['Lubumbashi','Şehir','Kongo DC',-11.66,27.48],
-    ['Luanda','Şehir','Angola',-8.84,13.23],['Victoria Falls','Kasaba','Zimbabve',-17.93,25.83],['Windhoek','Şehir','Namibya',-22.56,17.08],
-    ['Swakopmund','Şehir','Namibya',-22.68,14.53],['Cape Town','Şehir','Güney Afrika',-33.92,18.42],['Durban','Şehir','Güney Afrika',-29.86,31.03],
-    ['Maputo','Şehir','Mozambik',-25.97,32.57],['Antananarivo','Şehir','Madagaskar',-18.88,47.51],['Trablus','Şehir','Libya',32.89,13.19],
-    ['Kazablanka','Şehir','Fas',33.57,-7.59],['Tunus','Şehir','Tunus',36.81,10.18],['Gardaya','Şehir','Cezayir',32.49,3.67],
-    ['Gadames','Kasaba','Libya',30.13,9.50],['İskenderiye','Şehir','Mısır',31.20,29.92],['Nuakşot','Şehir','Moritanya',18.09,-15.98],
-    ['Saint-Louis','Şehir','Senegal',16.03,-16.49],['Akra','Şehir','Gana',5.60,-0.19],['Abidjan','Şehir','Fildişi Sahili',5.36,-4.01],
-    ['Ouagadougou','Şehir','Burkina Faso',12.37,-1.52],["N'Djamena",'Şehir','Çad',12.13,15.06],['Addis Ababa','Şehir','Etiyopya',9.03,38.74],
-    ['Cibuti','Şehir','Cibuti',11.59,43.15],['Arusha','Şehir','Tanzanya',-3.39,36.68],['Kampala','Şehir','Uganda',0.35,32.58],
-    ['Kinşasa','Şehir','Kongo DC',-4.32,15.31],['Libreville','Şehir','Gabon',0.42,9.47],['Lüderitz','Kasaba','Namibya',-26.65,15.16],
-    ['Maun','Kasaba','Botsvana',-19.98,23.42],['Lusaka','Şehir','Zambiya',-15.39,28.32],['Gqeberha','Şehir','Güney Afrika',-33.96,25.60],
-    ['Toliara','Şehir','Madagaskar',-23.35,43.67],
-  ],
-  namerica: [
-    ['Anchorage','Şehir','ABD',61.22,-149.90],['Nome','Kasaba','ABD',64.50,-165.41],['Talkeetna','Köy','ABD',62.32,-150.11],
-    ['Whitehorse','Şehir','Kanada',60.72,-135.06],['Vancouver','Şehir','Kanada',49.28,-123.12],['Banff','Kasaba','Kanada',51.18,-115.57],
-    ['Seattle','Şehir','ABD',47.61,-122.33],['San Francisco','Şehir','ABD',37.77,-122.42],['Las Vegas','Şehir','ABD',36.17,-115.14],
-    ['Denver','Şehir','ABD',39.74,-104.99],['Roswell','Şehir','ABD',33.39,-104.52],['Winnipeg','Şehir','Kanada',49.90,-97.14],
-    ['Churchill','Kasaba','Kanada',58.77,-94.17],['Iqaluit','Şehir','Kanada',63.75,-68.52],['Nuuk','Şehir','Grönland',64.18,-51.72],
-    ['Québec','Şehir','Kanada',46.81,-71.21],['Halifax','Şehir','Kanada',44.65,-63.57],['Boston','Şehir','ABD',42.36,-71.06],
-    ['Chicago','Şehir','ABD',41.88,-87.63],['New Orleans','Şehir','ABD',29.95,-90.07],['Houston','Şehir','ABD',29.76,-95.37],
-    ['Miami','Şehir','ABD',25.76,-80.19],['Key West','Şehir','ABD',24.56,-81.78],['Monterrey','Şehir','Meksika',25.69,-100.32],
-    ['Oaxaca','Şehir','Meksika',17.07,-96.73],['Tulum','Kasaba','Meksika',20.21,-87.47],['Havana','Şehir','Küba',23.11,-82.37],
-    ['Antigua Guatemala','Şehir','Guatemala',14.56,-90.73],['San José','Şehir','Kosta Rika',9.93,-84.08],['Santo Domingo','Şehir','Dominik Cumhuriyeti',18.49,-69.93],
-    ['Fairbanks','Şehir','ABD',64.84,-147.72],['Juneau','Şehir','ABD',58.30,-134.42],['Yellowknife','Şehir','Kanada',62.45,-114.37],
-    ['Calgary','Şehir','Kanada',51.05,-114.07],['Toronto','Şehir','Kanada',43.65,-79.38],["St. John's",'Şehir','Kanada',47.56,-52.71],
-    ['Ilulissat','Kasaba','Grönland',69.22,-51.10],['Portland','Şehir','ABD',45.52,-122.68],['Los Angeles','Şehir','ABD',34.05,-118.24],
-    ['Salt Lake City','Şehir','ABD',40.76,-111.89],['Phoenix','Şehir','ABD',33.45,-112.07],['Moab','Kasaba','ABD',38.57,-109.55],
-    ['Jackson','Kasaba','ABD',43.48,-110.76],['Minneapolis','Şehir','ABD',44.98,-93.27],['Nashville','Şehir','ABD',36.16,-86.78],
-    ['Atlanta','Şehir','ABD',33.75,-84.39],['Washington','Şehir','ABD',38.91,-77.04],['Tijuana','Şehir','Meksika',32.51,-117.04],
-    ['Cabo San Lucas','Şehir','Meksika',22.89,-109.91],['Guadalajara','Şehir','Meksika',20.67,-103.35],['Meksiko','Şehir','Meksika',19.43,-99.13],
-    ['Mérida','Şehir','Meksika',20.97,-89.62],['Belize City','Şehir','Belize',17.50,-88.20],['Managua','Şehir','Nikaragua',12.11,-86.24],
-    ['Kingston','Şehir','Jamaika',17.97,-76.79],['San Juan','Şehir','Porto Riko',18.47,-66.11],
-  ],
-  samerica: [
-    ['Cartagena','Şehir','Kolombiya',10.39,-75.48],['Medellín','Şehir','Kolombiya',6.24,-75.58],['Mérida','Şehir','Venezuela',8.59,-71.14],
-    ['Paramaribo','Şehir','Surinam',5.85,-55.20],['Manaus','Şehir','Brezilya',-3.12,-60.02],['Belém','Şehir','Brezilya',-1.46,-48.50],
-    ['Fortaleza','Şehir','Brezilya',-3.73,-38.53],['Salvador','Şehir','Brezilya',-12.97,-38.50],['Brasília','Şehir','Brezilya',-15.79,-47.88],
-    ['Rio de Janeiro','Şehir','Brezilya',-22.91,-43.17],['Florianópolis','Şehir','Brezilya',-27.59,-48.55],['Foz do Iguaçu','Şehir','Brezilya',-25.55,-54.59],
-    ['Montevideo','Şehir','Uruguay',-34.90,-56.16],['Asunción','Şehir','Paraguay',-25.26,-57.58],['Córdoba','Şehir','Arjantin',-31.42,-64.18],
-    ['Mendoza','Şehir','Arjantin',-32.89,-68.84],['Bariloche','Şehir','Arjantin',-41.13,-71.31],['El Chaltén','Köy','Arjantin',-49.33,-72.89],
-    ['Ushuaia','Şehir','Arjantin',-54.80,-68.30],['Punta Arenas','Şehir','Şili',-53.16,-70.91],['Valparaíso','Şehir','Şili',-33.05,-71.62],
-    ['San Pedro de Atacama','Köy','Şili',-22.91,-68.20],['Uyuni','Kasaba','Bolivya',-20.46,-66.83],['La Paz','Şehir','Bolivya',-16.50,-68.15],
-    ['Cusco','Şehir','Peru',-13.53,-71.97],['Arequipa','Şehir','Peru',-16.41,-71.54],['Iquitos','Şehir','Peru',-3.75,-73.25],
-    ['Guayaquil','Şehir','Ekvador',-2.19,-79.89],['Quito','Şehir','Ekvador',-0.18,-78.47],
-    ['Bogotá','Şehir','Kolombiya',4.71,-74.07],['Leticia','Kasaba','Kolombiya',-4.22,-69.94],['Caracas','Şehir','Venezuela',10.48,-66.90],
-    ['Ciudad Bolívar','Şehir','Venezuela',8.12,-63.55],['Georgetown','Şehir','Guyana',6.80,-58.16],['Cayenne','Şehir','Fransız Guyanası',4.94,-52.33],
-    ['Recife','Şehir','Brezilya',-8.05,-34.88],['São Paulo','Şehir','Brezilya',-23.55,-46.63],['Porto Alegre','Şehir','Brezilya',-30.03,-51.23],
-    ['Cuiabá','Şehir','Brezilya',-15.60,-56.10],['Porto Velho','Şehir','Brezilya',-8.76,-63.90],['Buenos Aires','Şehir','Arjantin',-34.60,-58.38],
-    ['Salta','Şehir','Arjantin',-24.79,-65.41],['Puerto Madryn','Şehir','Arjantin',-42.77,-65.04],['Santiago','Şehir','Şili',-33.45,-70.67],
-    ['Antofagasta','Şehir','Şili',-23.65,-70.40],['Puerto Montt','Şehir','Şili',-41.47,-72.94],['Lima','Şehir','Peru',-12.05,-77.04],
-    ['Puno','Şehir','Peru',-15.84,-70.02],['Sucre','Şehir','Bolivya',-19.05,-65.26],['Santa Cruz de la Sierra','Şehir','Bolivya',-17.78,-63.18],
-    ['Cuenca','Şehir','Ekvador',-2.90,-79.00],['Stanley','Kasaba','Falkland Adaları',-51.70,-57.85],
-  ],
-  oceania: [
-    ['Perth','Şehir','Avustralya',-31.95,115.86],['Exmouth','Kasaba','Avustralya',-21.93,114.13],['Broome','Kasaba','Avustralya',-17.96,122.24],
-    ['Darwin','Şehir','Avustralya',-12.46,130.84],['Alice Springs','Şehir','Avustralya',-23.70,133.88],['Coober Pedy','Kasaba','Avustralya',-29.01,134.75],
-    ['Birdsville','Köy','Avustralya',-25.90,139.35],['Mount Isa','Şehir','Avustralya',-20.73,139.49],['Kalgoorlie','Şehir','Avustralya',-30.75,121.47],
-    ['Esperance','Kasaba','Avustralya',-33.86,121.89],['Adelaide','Şehir','Avustralya',-34.93,138.60],['Melbourne','Şehir','Avustralya',-37.81,144.96],
-    ['Hobart','Şehir','Avustralya',-42.88,147.33],['Sidney','Şehir','Avustralya',-33.87,151.21],['Brisbane','Şehir','Avustralya',-27.47,153.03],
-    ['Cairns','Şehir','Avustralya',-16.92,145.77],['Townsville','Şehir','Avustralya',-19.26,146.82],['Auckland','Şehir','Yeni Zelanda',-36.85,174.76],
-    ['Rotorua','Şehir','Yeni Zelanda',-38.14,176.25],['Wellington','Şehir','Yeni Zelanda',-41.29,174.78],['Christchurch','Şehir','Yeni Zelanda',-43.53,172.64],
-    ['Queenstown','Kasaba','Yeni Zelanda',-45.03,168.66],['Port Moresby','Şehir','Papua Yeni Gine',-9.44,147.18],['Nouméa','Şehir','Yeni Kaledonya',-22.28,166.46],
-    ['Port Vila','Şehir','Vanuatu',-17.73,168.32],['Honiara','Şehir','Solomon Adaları',-9.43,159.95],['Suva','Şehir','Fiji',-18.14,178.44],
-    ['Canberra','Şehir','Avustralya',-35.28,149.13],['Gold Coast','Şehir','Avustralya',-28.02,153.40],['Newcastle','Şehir','Avustralya',-32.93,151.78],
-    ['Geraldton','Şehir','Avustralya',-28.78,114.61],['Albany','Şehir','Avustralya',-35.02,117.88],['Port Hedland','Kasaba','Avustralya',-20.31,118.58],
-    ['Katherine','Kasaba','Avustralya',-14.47,132.26],['Tennant Creek','Kasaba','Avustralya',-19.65,134.19],['Longreach','Kasaba','Avustralya',-23.44,144.25],
-    ['Weipa','Kasaba','Avustralya',-12.63,141.88],['Broken Hill','Şehir','Avustralya',-31.95,141.47],['Mildura','Şehir','Avustralya',-34.21,142.14],
-    ['Launceston','Şehir','Avustralya',-41.43,147.14],['Dunedin','Şehir','Yeni Zelanda',-45.87,170.50],['Napier','Şehir','Yeni Zelanda',-39.49,176.91],
-    ['Nelson','Şehir','Yeni Zelanda',-41.27,173.28],['Invercargill','Şehir','Yeni Zelanda',-46.41,168.35],['Lae','Şehir','Papua Yeni Gine',-6.72,147.00],
-    ['Madang','Şehir','Papua Yeni Gine',-5.22,145.80],['Jayapura','Şehir','Endonezya',-2.53,140.72],
-  ],
-};
+// Yerler places/<kıta>.json içinde: [ad, tür, ülke, enlem, boylam]. Kıta seçilince yüklenir.
+const placesCache = {};
+let loadingPlaces = false;
+const LOAD_ERROR = 'Yerler yüklenemedi. İnternet bağlantını kontrol edip tekrar dene.';
+async function loadPlaces(key) {
+  if (!placesCache[key]) {
+    const res = await fetch('places/' + key + '.json');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    placesCache[key] = await res.json();
+  }
+  return placesCache[key];
+}
 
 /* ---------- Geography ---------- */
 const geoms = TOPO.objects.countries.geometries;
@@ -464,7 +356,22 @@ function renderHome() {
       `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true"><path fill="var(--land)" d="${path(continentLand(key)) || ''}"></path></svg>
        <span class="cname">${c.name}</span>
        <span class="cbest">${best ? `En iyi <b>${fmt(best)}</b>` : 'Henüz oynanmadı'}</span>`;
-    btn.addEventListener('click', () => startGame(key));
+    btn.addEventListener('click', async () => {
+      if (loadingPlaces) return; // yükleme sürerken ikinci tıklama yok sayılır
+      loadingPlaces = true;
+      $('loadError').hidden = true;
+      btn.querySelector('.cname').textContent = 'Yükleniyor…';
+      try {
+        await loadPlaces(key);
+        startGame(key);
+      } catch {
+        $('loadError').textContent = LOAD_ERROR;
+        $('loadError').hidden = false;
+      } finally {
+        loadingPlaces = false;
+        btn.querySelector('.cname').textContent = c.name;
+      }
+    });
     grid.appendChild(btn);
   }
   $('loading').hidden = true;
@@ -498,9 +405,7 @@ function layoutMap() {
 }
 
 function pickQuestions(key, seed) {
-  const pool = PLACES[key].slice();
-  d3.shuffler(d3.randomLcg(seed))(pool);
-  return pool.slice(0, LEVELS[level].count).map(([name, type, country, lat, lon]) => ({ name, type, country, lat, lon }));
+  return pickPlaces(placesCache[key], LEVELS[level].mix, d3.randomLcg(seed)).map(([name, type, country, lat, lon]) => ({ name, type, country, lat, lon }));
 }
 
 function startGame(key, ch = null) {
@@ -741,7 +646,21 @@ if (incoming) {
     history.replaceState(null, '', location.pathname);
     $('challenge').hidden = true;
   };
-  $('btnChPlay').addEventListener('click', () => { leave(); startGame(incoming.c, incoming); });
+  $('btnChPlay').addEventListener('click', async () => {
+    const btn = $('btnChPlay');
+    btn.disabled = true;
+    $('chError').hidden = true;
+    try {
+      await loadPlaces(incoming.c);
+      leave();
+      startGame(incoming.c, incoming);
+    } catch {
+      $('chError').textContent = LOAD_ERROR;
+      $('chError').hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  });
   $('btnChSkip').addEventListener('click', () => { leave(); $('home').hidden = false; });
 }
 </script>
