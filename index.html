@@ -646,12 +646,15 @@ if (incoming) {
     history.replaceState(null, '', location.pathname);
     $('challenge').hidden = true;
   };
+  let skipped = false;
   $('btnChPlay').addEventListener('click', async () => {
     const btn = $('btnChPlay');
     btn.disabled = true;
+    loadingPlaces = true; // ana ekran kartları bu yükleme bitene kadar beklesin
     $('chError').hidden = true;
     try {
       await loadPlaces(incoming.c);
+      if (skipped) return; // oyuncu bu arada kendi oyununa geçti
       leave();
       startGame(incoming.c, incoming);
     } catch {
@@ -659,9 +662,10 @@ if (incoming) {
       $('chError').hidden = false;
     } finally {
       btn.disabled = false;
+      loadingPlaces = false;
     }
   });
-  $('btnChSkip').addEventListener('click', () => { leave(); $('home').hidden = false; });
+  $('btnChSkip').addEventListener('click', () => { skipped = true; leave(); $('home').hidden = false; });
 }
 </script>
 </body>
