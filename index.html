@@ -234,10 +234,11 @@ const TOPO = {"type":"Topology","objects":{"countries":{"type":"GeometryCollecti
 ;
 
 const LEVELS = {
-  kolay: { name: 'Kolay', count: 3, mix: { 'Şehir': 1, 'Kasaba': 1, 'Köy': 1 } },
-  orta:  { name: 'Orta',  count: 5, mix: { 'Şehir': 1, 'Kasaba': 2, 'Köy': 2 } },
-  zor:   { name: 'Zor',   count: 7, mix: { 'Şehir': 1, 'Kasaba': 3, 'Köy': 3 } },
+  kolay: { name: 'Kolay', mix: { 'Şehir': 1, 'Kasaba': 1, 'Köy': 1 } },
+  orta:  { name: 'Orta',  mix: { 'Şehir': 1, 'Kasaba': 2, 'Köy': 2 } },
+  zor:   { name: 'Zor',   mix: { 'Şehir': 1, 'Kasaba': 3, 'Köy': 3 } },
 };
+for (const l of Object.values(LEVELS)) l.count = Object.values(l.mix).reduce((a, b) => a + b); // soru sayısı oranlardan
 const ROUND_TIME_MS = 15000;
 const REVEAL_MS = 500;
 const NAME_VISIBLE_MS = 1400; // name shows, then fades out by this time
@@ -333,7 +334,7 @@ function renderLevels() {
 }
 $('levels').addEventListener('click', e => {
   const b = e.target.closest('.level');
-  if (!b) return;
+  if (!b || loadingPlaces) return; // yükleme sürerken seviye değişmesin
   level = b.dataset.level;
   saveLevel(level);
   renderHome();
@@ -341,6 +342,7 @@ $('levels').addEventListener('click', e => {
 
 function renderHome() {
   renderLevels();
+  $('loadError').hidden = true;
   const grid = $('grid');
   grid.innerHTML = '';
   for (const key of Object.keys(CONTINENTS)) {
@@ -361,9 +363,10 @@ function renderHome() {
       loadingPlaces = true;
       $('loadError').hidden = true;
       btn.querySelector('.cname').textContent = 'Yükleniyor…';
+      let ok = false;
       try {
         await loadPlaces(key);
-        startGame(key);
+        ok = true;
       } catch {
         $('loadError').textContent = LOAD_ERROR;
         $('loadError').hidden = false;
@@ -371,6 +374,7 @@ function renderHome() {
         loadingPlaces = false;
         btn.querySelector('.cname').textContent = c.name;
       }
+      if (ok) startGame(key);
     });
     grid.appendChild(btn);
   }
@@ -652,11 +656,10 @@ if (incoming) {
     btn.disabled = true;
     loadingPlaces = true; // ana ekran kartları bu yükleme bitene kadar beklesin
     $('chError').hidden = true;
+    let ok = false;
     try {
       await loadPlaces(incoming.c);
-      if (skipped) return; // oyuncu bu arada kendi oyununa geçti
-      leave();
-      startGame(incoming.c, incoming);
+      ok = true;
     } catch {
       $('chError').textContent = LOAD_ERROR;
       $('chError').hidden = false;
@@ -664,6 +667,9 @@ if (incoming) {
       btn.disabled = false;
       loadingPlaces = false;
     }
+    if (!ok || skipped) return; // skipped: oyuncu bu arada kendi oyununa geçti
+    leave();
+    startGame(incoming.c, incoming);
   });
   $('btnChSkip').addEventListener('click', () => { skipped = true; leave(); $('home').hidden = false; });
 }
